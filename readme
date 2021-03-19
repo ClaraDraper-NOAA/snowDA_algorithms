@@ -1,0 +1,7 @@
+Standalone snow OI code to assimilate GHCN snow depth obs and IMS snow cover.
+
+driver is adapted from ufs_utils/global_cycle/cycle.f90 
+
+Tseganeh Gichamo and Clara Draper, Mar. 2021.
+
+
