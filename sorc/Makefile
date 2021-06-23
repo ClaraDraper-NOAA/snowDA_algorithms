@@ -1,7 +1,7 @@
 SHELL=	/bin/ksh
 FC      =$(FCMP)
 LIBS    =$(LIBSM) -L/scratch2/BMC/gsienkf/Tseganeh.Gichamo/libs -llapack
-OBJS	=num_parthds.o driver_fIMS.o snow_da.o snow_analysis.o
+OBJS	=num_parthds.o driver_fIMS.o snow_da.o IMSaggregate_mod.o
 
 CMD     =calcfIMS
 $(CMD):	$(OBJS)
@@ -13,10 +13,10 @@ num_parthds.o:	num_parthds.f90
 snow_da.o: snow_da.f90
 	$(FC)  $(FFLAGS) $(OMPFLAG) -c snow_da.f90
 
-snow_analysis.o: snow_da.o snow_analysis.f90
-	$(FC)  $(FFLAGS) $(OMPFLAG) -c snow_analysis.f90
+IMSaggregate_mod.o: snow_da.o IMSaggregate_mod.f90
+	$(FC)  $(FFLAGS) $(OMPFLAG) -c IMSaggregate_mod.f90
 
-driver_fIMS.o: snow_analysis.o driver_fIMS.f90
+driver_fIMS.o: IMSaggregate_mod.o driver_fIMS.f90
 	$(FC)  $(FFLAGS) -c driver_fIMS.f90
 
 install:
