@@ -793,7 +793,7 @@ MODULE M_DA
                 If((Lat_GHCND_In(jndx) >= lat_min) .and. (Lat_GHCND_In(jndx) <= lat_max) .and. &
                    (((Lon_GHCND_In(jndx) >= lon_min) .and. (Lon_GHCND_In(jndx) <= 180.)) .or. &
                     ((Lon_GHCND_In(jndx) >= -180.) .and. (Lon_GHCND_In(jndx) <= lon_max))) .and. &
-                    (SND_GHCND_In(jndx) >= 0 )) then   !(.NOT. IEEE_IS_NAN(SND_GHCND_In(jndx)))) then
+                    (SND_GHCND_In(jndx) >= 0 ) .and. (.NOT. IEEE_IS_NAN(SND_GHCND_In(jndx)))) then
                         NDIM = NDIM + 1
                         index_Array(jcounter) = jndx
                         jcounter = jcounter + 1
@@ -803,7 +803,7 @@ MODULE M_DA
             Do jndx = 1, NDIM_In
                 If((Lat_GHCND_In(jndx) >= lat_min) .and. (Lat_GHCND_In(jndx) <= lat_max) .and. &
                     (Lon_GHCND_In(jndx) >= lon_min) .and. (Lon_GHCND_In(jndx) <= lon_max) .and. &
-                    (SND_GHCND_In(jndx) >= 0 )) then  !(.NOT. IEEE_IS_NAN(SND_GHCND_In(jndx)))) then                        
+                    (SND_GHCND_In(jndx) >= 0 ) .and. (.NOT. IEEE_IS_NAN(SND_GHCND_In(jndx)))) then                        
                         NDIM = NDIM + 1
                         index_Array(jcounter) = jndx
                         jcounter = jcounter + 1

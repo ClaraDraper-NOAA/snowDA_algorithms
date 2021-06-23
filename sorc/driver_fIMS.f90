@@ -1,5 +1,4 @@
- PROGRAM driver_snowOI
-! CSD fill in comments
+ PROGRAM driver_fIMS
 
  USE M_Snow_Analysis
 
@@ -13,35 +12,21 @@
 
 ! 
  REAL, ALLOCATABLE   :: SNOANL(:) 
- REAL                :: horz_len_scale, ver_len_scale, obs_tolerance 
- REAL                :: obs_srch_rad, bkgst_srch_rad, ims_max_ele, dT_Asssim
- Integer             :: max_num_nearStn, max_num_nearIMS, num_subgrd_ims_cels, num_assim_steps
- LOGICAL             :: assim_SnowPack_obs, assim_SnowCov_obs
- CHARACTER(LEN=500)  :: GHCND_SNOWDEPTH_PATH, IMS_SNOWCOVER_PATH, &
-                        IMS_INDEXES_PATH, SFC_FORECAST_PREFIX
+ REAL                :: dT_Asssim
+ Integer             :: max_num_nearIMS, num_subgrd_ims_cels, num_assim_steps
+ CHARACTER(LEN=500)  :: IMS_SNOWCOVER_PATH, IMS_INDEXES_PATH, SFC_FORECAST_PREFIX
 
  NAMELIST/NAMSNO/  IDIM,JDIM,LSOIL,IY,IM,ID,IH , IVEGSRC, & 
-                  horz_len_scale, ver_len_scale, obs_tolerance, & 
-                  obs_srch_rad, bkgst_srch_rad, max_num_nearStn, max_num_nearIMS, &
-                  ims_max_ele, num_subgrd_ims_cels, & 
-                  assim_SnowPack_obs, assim_SnowCov_obs,  &
-                  GHCND_SNOWDEPTH_PATH, IMS_SNOWCOVER_PATH, IMS_INDEXES_PATH, SFC_FORECAST_PREFIX
+                  max_num_nearIMS, num_subgrd_ims_cels, & 
+                  SFC_FORECAST_PREFIX, IMS_SNOWCOVER_PATH, IMS_INDEXES_PATH
 
 ! model setup 
  DATA NUM_TILES/6/
 ! snow DA  defaults
- DATA horz_len_scale/55.0/
- DATA ver_len_scale/800./
- DATA obs_tolerance/5./ 
- DATA obs_srch_rad/250.0/
- DATA bkgst_srch_rad/27.0/ 
- DATA max_num_nearStn/50/ 
  DATA max_num_nearIMS/5/
- DATA ims_max_ele/1500./
  DATA num_subgrd_ims_cels/30/
- DATA assim_SnowPack_obs/.false./
- DATA assim_SnowCov_obs/.false./
- DATA GHCND_SNOWDEPTH_PATH/'        '/ 
+ DATA num_assim_steps/1/  ! For multiple time steps of assimilation
+ DATA dT_Asssim/24.0/     ! hrs. For multiple time steps of assimilation
  DATA IMS_SNOWCOVER_PATH/'        '/
  DATA IMS_INDEXES_PATH/'        '/
  DATA SFC_FORECAST_PREFIX/'        '/   ! leave this empty to use the default sfc_ files location
@@ -80,14 +65,11 @@
  ALLOCATE(SNOANL(LENSFC))
  CALL MPI_BARRIER(MPI_COMM_WORLD, IERR)
 
- Call Snow_Analysis_OI(NUM_TILES, MYRANK, NPROCS, IDIM, JDIM, IY, IM, ID, IH, &
+ Call calculate_IMS_fSCA(NUM_TILES, MYRANK, NPROCS, IDIM, JDIM, IY, IM, ID, IH, &
                       LENSFC, IVEGSRC,   &
-                      horz_len_scale, ver_len_scale, obs_tolerance, &
-                      obs_srch_rad, bkgst_srch_rad, max_num_nearStn, &
-                      ims_max_ele, num_subgrd_ims_cels, &
-                      assim_SnowPack_obs, assim_SnowCov_obs, &
-                      GHCND_SNOWDEPTH_PATH, IMS_SNOWCOVER_PATH, IMS_INDEXES_PATH, SFC_FORECAST_PREFIX, &
-                      SNOANL)
+                      num_assim_steps, dT_Asssim, &
+                      max_num_nearIMS, num_subgrd_ims_cels, &
+                      SFC_FORECAST_PREFIX, IMS_SNOWCOVER_PATH, IMS_INDEXES_PATH)
  PRINT*,"snowDA: returned from OI on RANK", MYRANK
 
  DEALLOCATE(SNOANL)
@@ -100,4 +82,4 @@
 
  STOP
 
- END PROGRAM driver_snowOI
+ END PROGRAM driver_fIMS
