@@ -8,6 +8,10 @@ public calculate_IMS_fsca
 
 contains
 
+!====================================
+! main routine to read in inputs, calculate IMS snow cover fraction, and IMS SWE, 
+! write out results on model grid.
+
 subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, & 
                                 num_subgrd_IMS_cels, date_str,&
                                 IMS_snowcover_path, IMS_indexes_path)
@@ -26,11 +30,11 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
         character(len=*), intent(in)   :: IMS_snowcover_path, IMS_indexes_path
         integer, intent(in) ::  num_subgrd_IMS_cels 
 
-        character(len=1)    :: tile_str
         integer             :: ierr     
         character(len=250)  :: IMS_inp_file, IMS_inp_file_indices 
         character(len=250)  :: IMS_out_file, vegt_inp_file
-        character(len=3)    :: rankch, rchar
+        character(len=1)    :: tile_str
+        character(len=3)    :: rchar
         real                :: sncov_IMS(lensfc)  ! IMS fractional snow cover in model grid
         real                :: swe_IMS(lensfc)    ! SWE derived from sncov_IMS, on model grid
         real                :: vetfcs(lensfc)     ! model vegetation type
@@ -71,7 +75,7 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
 ! 2.  Write outputs
 !=============================================================================================
         
-        IMS_out_file = "./IMSfsca.tile"//tile_str//".nc"  !  
+        IMS_out_file = "./IMSfSCA.tile"//tile_str//".nc"  !  
         if (myrank==printrank) print*,'writing output to ',trim(IMS_out_file) 
         call write_fsca_outputs(trim(IMS_out_file), idim, jdim, lensfc, myrank, &
                               sncov_IMS, swe_IMS) 
@@ -82,6 +86,9 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
         return
 
  end subroutine calculate_IMS_fsca
+
+!====================================
+! routine to write the output to file
 
  subroutine write_fsca_outputs(output_file, idim, jdim, lensfc, myrank,   &
                                  sncov_IMS, swe_IMS)  !, anl_fsca) !updated snocov
@@ -205,6 +212,9 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
     
  end subroutine write_fsca_outputs
 
+!====================================
+! read in vegetation file from a UFS surface restart 
+
  subroutine read_vegtype(vegt_inp_path, lensfc, vetfcs) 
     
         implicit none
@@ -263,10 +273,13 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
     
  end subroutine read_vegtype
 
+!====================================
+! read in the IMS observations and  associated index file, then 
+! aggregate onto the model grid.
+
  subroutine observation_read_IMS_full(inp_file, inp_file_indices, &
                     myrank, n_lat, n_lon, num_sub, &
                     sncov_IMS)
-!**
                     
         implicit none
     
@@ -283,10 +296,11 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
         integer                :: error, ncid, id_dim, id_var, dim_len, dim_len_lat, dim_len_lon
         logical                :: file_exists
 
+        ! read IMS observations in
         inquire(file=trim(inp_file), exist=file_exists)
 
         if (.not. file_exists) then
-                print *, 'iobservation_read_IMS_full error,file does not exist', &
+                print *, 'observation_read_IMS_full error,file does not exist', &
                         trim(inp_file) , ' exiting'
                 call mpi_abort(mpi_comm_world, 10)
         endif
@@ -316,7 +330,7 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
         
         error = nf90_close(ncid)
 
-! read index file for mapping IMS to model grid 
+        ! read index file for mapping IMS to model grid 
 
         inquire(file=trim(inp_file_indices), exist=file_exists)
 
@@ -336,7 +350,8 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
         call netcdf_err(error, 'error reading sncov indices' )
     
         error = nf90_close(ncid)
-    
+   
+        ! conversion of IMS codes  
         where(sncov_IMS_2d_full /= 4) sncov_IMS_2d_full = 0
         where(sncov_IMS_2d_full == 4) sncov_IMS_2d_full = 1
         
@@ -350,6 +365,10 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
         return
         
  end subroutine observation_read_IMS_full
+
+!====================================
+! calculate SWE from fractional snow cover, using the noah model relationship 
+! uses empirical inversion of snow depletion curve in the model 
 
  subroutine calcswefromsnowcover(sncov_IMS, vetfcs_in, lensfc, swe_IMS_at_grid)
 
@@ -406,6 +425,8 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
         return
     
  end subroutine calcswefromsnowcover
+
+!====================================
 
  subroutine resample_to_model_tiles_intrp(data_grid_IMS, data_grid_IMS_ind, &
                                             nlat_IMS, nlon_IMS, n_lat, n_lon, num_sub, & 
