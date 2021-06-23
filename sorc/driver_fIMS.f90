@@ -1,58 +1,51 @@
- PROGRAM driver_fIMS
+ program driver_fIMS
 
- USE IMSaggregate_mod
+ use IMSaggregate_mod
 
- IMPLICIT NONE
+ implicit none
 
  include 'mpif.h'
 
- INTEGER :: IDIM, JDIM,  NUM_TILES
- INTEGER :: LENSFC, IVEGSRC,  IERR
- INTEGER :: NPROCS, MYRANK, NUM_THREADS, NUM_PARTHDS 
+ integer :: idim, jdim,  num_tiles
+ integer :: lensfc, ierr
+ integer :: nprocs, myrank
 
 ! 
- Integer             :: num_subgrd_ims_cels, num_assim_steps
- CHARACTER(LEN=10)   :: DATE_STR ! YYYYMMDDHH
- CHARACTER(LEN=500)  :: IMS_SNOWCOVER_PATH, IMS_INDEXES_PATH 
+ integer             :: num_subgrd_IMS_cels, num_assim_steps
+ character(len=10)   :: date_str ! yyyymmddhh
+ character(len=500)  :: IMS_snowcover_path, IMS_indexes_path 
 
- NAMELIST/fIMS/  IDIM,JDIM,date_str, num_subgrd_ims_cels, IMS_SNOWCOVER_PATH, IMS_INDEXES_PATH
+ namelist/fIMS/  idim,jdim,date_str, num_subgrd_IMS_cels, IMS_snowcover_path, IMS_indexes_path
 
 ! model setup 
- DATA NUM_TILES/6/
-! snow DA  defaults
- DATA num_subgrd_ims_cels/30/
- DATA IMS_SNOWCOVER_PATH/'        '/
- DATA IMS_INDEXES_PATH/'        '/
+ data num_tiles/6/
+! snow da  defaults
+ data num_subgrd_IMS_cels/30/
 
- CALL MPI_INIT(IERR)
- CALL MPI_COMM_SIZE(MPI_COMM_WORLD, NPROCS, IERR)
- CALL MPI_COMM_RANK(MPI_COMM_WORLD, MYRANK, IERR)
+ call mpi_init(ierr)
+ call mpi_comm_size(mpi_comm_world, nprocs, ierr)
+ call mpi_comm_rank(mpi_comm_world, myrank, ierr)
 
- NUM_THREADS = NUM_PARTHDS()
+ print*,"starting fIMS program on rank ", myrank
 
- PRINT*
- PRINT*,"STARTING fIMS PROGRAM ON RANK ", MYRANK
- PRINT*,"RUNNING WITH ", NPROCS, "TASKS"
- PRINT*,"AND WITH ", NUM_THREADS, " THREADS."
+ if (nprocs .NE. num_tiles) then 
+        print *, 'driver_fIMS error: nprocs must = num_tiles', nprocs, num_tiles 
+        call mpi_abort(mpi_comm_world, 999)
+ endif
 
- PRINT*
- PRINT*,"READ fIMS NAMELIST."
+ call baopenr(360, "fIMS.nml", ierr)
+ read(360, nml=fIMS)
 
- CALL BAOPENR(360, "fIMS.nml", IERR)
- READ(360, NML=fIMS)
- IF (MYRANK==0) WRITE(6,fIMS)
+ lensfc = idim*jdim ! total number of points for the cubed-sphere tile
 
- LENSFC = IDIM*JDIM ! TOTAL NUMBER OF POINTS FOR THE CUBED-SPHERE TILE
+ call mpi_barrier(mpi_comm_world, ierr)
 
- PRINT*,"calling calcfIMS on RANK" , MYRANK
- CALL MPI_BARRIER(MPI_COMM_WORLD, IERR)
+ call calculate_IMS_fsca(num_tiles, myrank, idim, jdim, &
+                      lensfc, num_subgrd_IMS_cels, date_str,&
+                      IMS_snowcover_path, IMS_indexes_path)
+ print*,"calcfIMS returned on rank", myrank
 
- CALL calculate_IMS_fSCA(NUM_TILES, MYRANK, NPROCS, IDIM, JDIM, &
-                      LENSFC, num_subgrd_ims_cels, date_str,&
-                      IMS_SNOWCOVER_PATH, IMS_INDEXES_PATH)
- PRINT*,"calcfIMS returned on RANK", MYRANK
+ call mpi_barrier(mpi_comm_world, ierr)
+ call mpi_finalize(ierr)
 
- CALL MPI_BARRIER(MPI_COMM_WORLD, IERR)
- CALL MPI_FINALIZE(IERR)
-
- END PROGRAM driver_fIMS
+ end program driver_fIMS

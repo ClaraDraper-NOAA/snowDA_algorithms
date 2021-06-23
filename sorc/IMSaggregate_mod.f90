@@ -8,7 +8,7 @@ public calculate_IMS_fsca
 
 contains
 
-subroutine calculate_IMS_fsca(num_tiles, myrank, nprocs,idim, jdim, lensfc, & 
+subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, & 
                                 num_subgrd_IMS_cels, date_str,&
                                 IMS_snowcover_path, IMS_indexes_path)
                                                         
@@ -21,75 +21,49 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, nprocs,idim, jdim, lensfc, &
         !
         include 'mpif.h'
         
-        integer, intent(in)    :: num_tiles, myrank, nprocs, idim, jdim, lensfc
+        integer, intent(in)    :: num_tiles, myrank, idim, jdim, lensfc
         character(len=10), intent(in) :: date_str ! yyyymmddhh
         character(len=*), intent(in)   :: IMS_snowcover_path, IMS_indexes_path
         integer, intent(in) ::  num_subgrd_IMS_cels 
 
-        character(len=3)    :: tile_str
+        character(len=1)    :: tile_str
         integer             :: ierr     
         character(len=250)  :: IMS_inp_file, IMS_inp_file_indices 
-        character(len=250)  :: IMS_out_file, forc_inp_file
+        character(len=250)  :: IMS_out_file, vegt_inp_file
         character(len=3)    :: rankch, rchar
-        real                :: sncov_IMS(lensfc)  ! IMS resampled at each grid
-        real                :: swe_IMS(lensfc)
-        real                :: vetfcs(lensfc)
+        real                :: sncov_IMS(lensfc)  ! IMS fractional snow cover in model grid
+        real                :: swe_IMS(lensfc)    ! SWE derived from sncov_IMS, on model grid
+        real                :: vetfcs(lensfc)     ! model vegetation type
 
-    ! for mpi par
-        integer            :: np_ext, np_til, p_tn, p_trank, n_sa, n_sa_ext, mp_start, mp_end
-        integer            :: send_proc, rec_stat(mpi_status_size), dest_aoffset, pindex
         integer, parameter :: printrank = 4 
 
-!=============================================================================================
-! 1. Set-up processors 
-!=============================================================================================
 
-        call mpi_barrier(mpi_comm_world, ierr)
-!total number of processors used = multiple of 6: any extra processors sent to end of subroutine
-        if (myrank ==printrank) print*,"IMS fsca: total num proc ", nprocs, " num tiles : ", num_tiles
-
-        np_ext = mod(nprocs, num_tiles)  ! extra/inactive procs
-        if (myrank >  nprocs - np_ext - 1) goto 999
-        np_til = nprocs / num_tiles  ! num proc. per tile 
-        p_tn = mod(myrank, num_tiles)  ! tile for proc.
-        p_trank = myrank / num_tiles  ! proc. rank within tile
-        n_sa = lensfc / np_til  ! sub array length per proc
-        n_sa_ext = lensfc - n_sa * np_til ! extra grid cells
-        if(p_trank == 0) then 
-                mp_start = 1
-        else
-                mp_start = p_trank * n_sa + n_sa_ext + 1   ! start index of subarray for proc
-        endif
-        mp_end = (p_trank + 1) * n_sa + n_sa_ext                ! end index of subarray for proc        
-        if(myrank == printrank )print*,"snowda: sub array length ", n_sa, " extra sub array: ", n_sa_ext
+!=============================================================================================
+! 1. Read veg type, and IMS data and indexes from file, then calculate SWE
+!=============================================================================================
 
         ! rank 0 reads tile 1, etc.
-        write(tile_str, '(i3.3)') (myrank+1)
+        write(tile_str, '(i1.1)') (myrank+1) ! assuming <10 tiles.
 
-!=============================================================================================
-! 2. Read veg type, and IMS data and indexes from file, then calculate SWE
-!=============================================================================================
-
-        ! vegetation type is read from a forecast file (does not change)
-        write(rankch, '(i3.3)') (p_tn+1)
-        forc_inp_file = "./fnbgsi." // rankch
-
-        if (myrank==printrank) print *, 'reading model backgroundfile for veg type', trim(forc_inp_file) 
+        ! read vegetation type from a forecast file (does not change)
+        vegt_inp_file = "./fnbgsi.00" // tile_str
+        if (myrank==printrank) print *, 'reading model backgroundfile for veg type', trim(vegt_inp_file) 
                                      
-        call read_vegtype(forc_inp_file, lensfc, vetfcs)
+        call read_vegtype(vegt_inp_file, lensfc, vetfcs)
 
-        if (myrank==printrank) print *, 'reading IMS snow cover data'
-        IMS_inp_file = trim(IMS_snowcover_path)//"IMS.SNCOV."//date_str//".nc"                      !
+        ! read IMS obs, and indexes, map to model grid
+        IMS_inp_file = trim(IMS_snowcover_path)//"IMS.SNCOV."//date_str//".nc"                 
+        if (myrank==printrank) print *, 'reading IMS snow cover data from ', trim(IMS_inp_file) 
 
         write(rchar, "(i3)") idim
         IMS_inp_file_indices = trim(IMS_indexes_path)//"C"//trim(adjustl(rchar))// &
-                                                    ".IMS.indices."//trim(tile_num)//".nc"                       
+                                                    ".IMS.Indices.tile"//tile_str//".nc"                       
+        if (myrank==printrank) print *, 'reading IMS index file', trim(IMS_inp_file_indices) 
 
-        if (myrank==printrank) print *, 'snowda: reading IMS index file', trim(IMS_inp_file) 
         call observation_read_IMS_full(IMS_inp_file, IMS_inp_file_indices, &
                                                     myrank, jdim, idim, num_subgrd_IMS_cels, sncov_IMS)
 
-        if (myrank==printrank) print*,'finished reading sncov, converting to snow depth' 
+        if (myrank==printrank) print*,'read in sncov, converting to snow depth' 
  
         call calcswefromsnowcover(sncov_IMS, vetfcs, lensfc, swe_IMS)
 
@@ -97,7 +71,8 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, nprocs,idim, jdim, lensfc, &
 ! 2.  Write outputs
 !=============================================================================================
         
-        IMS_out_file = "./IMSfsca.tile"//rank_str//".nc"  !  
+        IMS_out_file = "./IMSfsca.tile"//tile_str//".nc"  !  
+        if (myrank==printrank) print*,'writing output to ',trim(IMS_out_file) 
         call write_fsca_outputs(trim(IMS_out_file), idim, jdim, lensfc, myrank, &
                               sncov_IMS, swe_IMS) 
 
@@ -183,7 +158,7 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, nprocs,idim, jdim, lensfc, &
 
         error = nf90_def_var(ncid, 'IMSswe', nf90_double, dIMS_3d, id_IMSsnd)
         call netcdf_err(error, 'defining IMSswe' )
-        error = nf90_put_att(ncid, id_IMSsnd, "long_name", "IMS SWE")
+        error = nf90_put_att(ncid, id_IMSsnd, "long_name", "IMS snow water equivalent")
         call netcdf_err(error, 'defining IMSswe long name' )
         error = nf90_put_att(ncid, id_IMSsnd, "units", "mm")
         call netcdf_err(error, 'defining IMSswe units' )
@@ -230,13 +205,13 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, nprocs,idim, jdim, lensfc, &
     
  end subroutine write_fsca_outputs
 
- subroutine read_vegtype(forc_inp_path, lensfc, vetfcs) 
+ subroutine read_vegtype(vegt_inp_path, lensfc, vetfcs) 
     
         implicit none
 
         include "mpif.h"
         
-        character(len=*), intent(in)      :: forc_inp_path
+        character(len=*), intent(in)      :: vegt_inp_path
         integer, intent(in)               :: lensfc
         real, intent(out)                 :: vetfcs(lensfc) 
 
@@ -247,17 +222,17 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, nprocs,idim, jdim, lensfc, &
         real(kind=8), allocatable :: dummy(:,:)
         logical                   :: file_exists
 
-        inquire(file=trim(forc_inp_path), exist=file_exists)
+        inquire(file=trim(vegt_inp_path), exist=file_exists)
 
         if (.not. file_exists) then 
                 print *, 'read_vegtype error,file does not exist', &   
-                        trim(forc_inp_path) , ' exiting'
+                        trim(vegt_inp_path) , ' exiting'
                 call mpi_abort(mpi_comm_world, 10)
         endif
                 
 
-        error=nf90_open(trim(forc_inp_path), nf90_nowrite,ncid)
-        call netcdf_err(error, 'opening file: '//trim(forc_inp_path) )
+        error=nf90_open(trim(vegt_inp_path), nf90_nowrite,ncid)
+        call netcdf_err(error, 'opening file: '//trim(vegt_inp_path) )
 
         error=nf90_inq_dimid(ncid, 'xaxis_1', id_dim)
         call netcdf_err(error, 'reading xaxis_1' )
@@ -354,7 +329,7 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, nprocs,idim, jdim, lensfc, &
         error=nf90_open(trim(inp_file_indices),nf90_nowrite, ncid)
         call netcdf_err(error, 'opening file: '//trim(inp_file_indices) )
     
-        error=nf90_inq_varid(ncid, 'IMS_indices', id_var)
+        error=nf90_inq_varid(ncid, 'IMS_Indices', id_var)
         call netcdf_err(error, 'error reading sncov indices id' )
         error=nf90_get_var(ncid, id_var, data_grid_IMS_ind, start = (/ 1, 1, 1 /), &
                                 count = (/ num_sub, n_lon, n_lat/))
