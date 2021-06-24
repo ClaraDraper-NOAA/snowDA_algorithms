@@ -1,10 +1,13 @@
 module IMSaggregate_mod
 
 use netcdf
-use, intrinsic :: IEEE_arithmetic
 
 private
 public calculate_IMS_fsca
+
+real, parameter    ::  nodata_real = -999. 
+integer, parameter ::  nodata_int = -999
+real, parameter    ::  nodata_tol = 0.1
 
 contains
 
@@ -62,12 +65,12 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
                                                     ".IMS.Indices.tile"//tile_str//".nc"                       
         if (myrank==printrank) print *, 'reading IMS index file', trim(IMS_inp_file_indices) 
 
-        call observation_read_IMS_full(IMS_inp_file, IMS_inp_file_indices, &
+        call read_IMS_onto_model_grid(IMS_inp_file, IMS_inp_file_indices, &
                                                     myrank, jdim, idim, sncov_IMS)
 
         if (myrank==printrank) print*,'read in sncov, converting to snow depth' 
  
-        call calcswefromsnowcover(sncov_IMS, vetfcs, lensfc, swe_IMS)
+        call calcSWEfromSCFnoah(sncov_IMS, vetfcs, lensfc, swe_IMS)
 
 !=============================================================================================
 ! 2.  Write outputs
@@ -275,7 +278,7 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
 ! read in the IMS observations and  associated index file, then 
 ! aggregate onto the model grid.
 
- subroutine observation_read_IMS_full(inp_file, inp_file_indices, &
+ subroutine read_IMS_onto_model_grid(inp_file, inp_file_indices, &
                     myrank, n_lat, n_lon, sncov_IMS)
                     
         implicit none
@@ -364,8 +367,18 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
         !          : 2 - land, no snow 
         !          : 3 - sea ice 
         !          : 4 - snow covered land
-        where(sncov_IMS_2d_full /= 4) sncov_IMS_2d_full = 0
-        where(sncov_IMS_2d_full == 4) sncov_IMS_2d_full = 1
+
+
+        ! calculate fraction of land within grid cell that is snow covered
+        sncov_IMS_2d_full = sncov_IMS_2d_full 
+        where(sncov_IMS_2d_full == 0 ) sncov_IMS_2d_full = nodata_int ! set outside range to NA
+        where(sncov_IMS_2d_full == 1 ) sncov_IMS_2d_full = nodata_int ! set sea to NA
+        where(sncov_IMS_2d_full == 3 ) sncov_IMS_2d_full = nodata_int ! set sea ice to NA
+        where(sncov_IMS_2d_full == 2 ) sncov_IMS_2d_full = 0          ! set land, no snow to 0
+        where(sncov_IMS_2d_full == 4 ) sncov_IMS_2d_full = 1 ! set snow on land to 1
+
+        !where(sncov_IMS_2d_full /= 4) sncov_IMS_2d_full = 0
+        !where(sncov_IMS_2d_full == 4) sncov_IMS_2d_full = 1
         
         call resample_to_model_tiles_intrp(sncov_IMS_2d_full, data_grid_IMS_ind, &
                                            dim_len_lat, dim_len_lon, n_lat, n_lon, n_ind, &
@@ -378,13 +391,13 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
 
         return
         
- end subroutine observation_read_IMS_full
+ end subroutine read_IMS_onto_model_grid
 
 !====================================
 ! calculate SWE from fractional snow cover, using the noah model relationship 
 ! uses empirical inversion of snow depletion curve in the model 
 
- subroutine calcswefromsnowcover(sncov_IMS, vetfcs_in, lensfc, swe_IMS_at_grid)
+ subroutine calcSWEfromSCFnoah(sncov_IMS, vetfcs_in, lensfc, swe_IMS_at_grid)
         
         implicit none
         !
@@ -399,7 +412,7 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
 
 
         !fill background values to nan (to differentiate those that don't have value)
-        swe_IMS_at_grid = IEEE_value(swe_IMS_at_grid, IEEE_quiet_nan)
+        swe_IMS_at_grid = nodata_real
    
         ! note: this is an empirical inversion of   snfrac rotuine in noah 
         !  should really have a land model check in here. 
@@ -418,7 +431,8 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
         !where(vetfcs==0) vetfcs = 7 
         
         do indx = 1, lensfc  
-            if (.not. IEEE_is_nan(sncov_IMS(indx)) .and. (vetfcs(indx)>0)) then
+            if ( (abs(sncov_IMS(indx) -nodata_real) > nodata_tol ) .and. & 
+                 (vetfcs(indx)>0)  ) then
                 snup = snupx(vetfcs(indx))
                 if (snup == 0.) then
                     print*, " 0.0 snup value, check vegclasses", vetfcs(indx)
@@ -438,7 +452,7 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
         end do  
         return
     
- end subroutine calcswefromsnowcover
+ end subroutine calcSWEfromSCFnoah
 
 !====================================
 ! project IMS input onto model grid
@@ -448,8 +462,6 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
                                             nlat_IMS, nlon_IMS, n_lat, n_lon, num_sub, & 
                                             grid_dat)
                                             
-    Use, Intrinsic :: IEEE_ARITHMETIC
-
     implicit none
 
     integer, intent(in)     :: nlat_IMS, nlon_IMS, n_lat, n_lon, num_sub 
@@ -457,9 +469,10 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
     real, intent(out)       :: grid_dat(n_lon, n_lat)
 
     integer   :: jc, jy, ix, num_loc_counter
+    real      :: num_data
     integer   :: lonlatcoord_IMS, loncoord_IMS, latcoord_IMS
     
-    grid_dat = IEEE_value(grid_dat, IEEE_quiet_NaN)
+    grid_dat = nodata_real
 
     do jy=1, n_lat
 
@@ -471,6 +484,8 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
             end if
 
             grid_dat(ix, jy) = 0.
+            num_data = 0.
+        
             do jc = 2, num_loc_counter+1
                 lonlatcoord_IMS = data_grid_IMS_ind(jc, ix, jy) - 1 
                 latcoord_IMS = lonlatcoord_IMS / nlon_IMS + 1
@@ -483,10 +498,17 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
                     loncoord_IMS = nlon_IMS
                     print*, "warning! lon coordinate outside domain boundary"
                 endif
-                grid_dat(ix, jy) =  grid_dat(ix, jy) + data_grid_IMS(loncoord_IMS, latcoord_IMS)              
+                if ( ( data_grid_IMS(loncoord_IMS, latcoord_IMS)  - nodata_int) .ne. 0 ) then
+                        grid_dat(ix, jy) =  grid_dat(ix, jy) + data_grid_IMS(loncoord_IMS, latcoord_IMS)
+                        num_data = num_data+1. 
+                endif
+                
             end do
-
-            grid_dat(ix, jy) =  grid_dat(ix, jy) / num_loc_counter ! first location, num obs
+            if (num_data > 0 ) then
+                grid_dat(ix, jy) =  grid_dat(ix, jy) / num_data
+            else 
+                grid_dat(ix, jy) = nodata_real
+            endif
 
         end do
 
