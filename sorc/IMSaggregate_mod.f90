@@ -13,8 +13,7 @@ contains
 ! write out results on model grid.
 
 subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, & 
-                                num_subgrd_IMS_cels, date_str,&
-                                IMS_snowcover_path, IMS_indexes_path)
+                                date_str,IMS_snowcover_path, IMS_indexes_path)
                                                         
         !----------------------------------------------------------------------
         ! input arguments: 
@@ -28,13 +27,12 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
         integer, intent(in)    :: num_tiles, myrank, idim, jdim, lensfc
         character(len=10), intent(in) :: date_str ! yyyymmddhh
         character(len=*), intent(in)   :: IMS_snowcover_path, IMS_indexes_path
-        integer, intent(in) ::  num_subgrd_IMS_cels 
 
         integer             :: ierr     
         character(len=250)  :: IMS_inp_file, IMS_inp_file_indices 
         character(len=250)  :: IMS_out_file, vegt_inp_file
         character(len=1)    :: tile_str
-        character(len=3)    :: rchar
+        character(len=3)    :: resl_str
         real                :: sncov_IMS(lensfc)  ! IMS fractional snow cover in model grid
         real                :: swe_IMS(lensfc)    ! SWE derived from sncov_IMS, on model grid
         real                :: vetfcs(lensfc)     ! model vegetation type
@@ -48,9 +46,10 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
 
         ! rank 0 reads tile 1, etc.
         write(tile_str, '(i1.1)') (myrank+1) ! assuming <10 tiles.
+        write(resl_str, "(i3)") idim
 
-        ! read vegetation type from a forecast file (does not change)
-        vegt_inp_file = "./fnbgsi.00" // tile_str
+        ! read vegetation type
+        vegt_inp_file = './C'//trim(adjustl(resl_str))//'.vegetation_type.tile'//tile_str//'.nc'
         if (myrank==printrank) print *, 'reading model backgroundfile for veg type', trim(vegt_inp_file) 
                                      
         call read_vegtype(vegt_inp_file, lensfc, vetfcs)
@@ -59,13 +58,12 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
         IMS_inp_file = trim(IMS_snowcover_path)//"IMS.SNCOV."//date_str//".nc"                 
         if (myrank==printrank) print *, 'reading IMS snow cover data from ', trim(IMS_inp_file) 
 
-        write(rchar, "(i3)") idim
-        IMS_inp_file_indices = trim(IMS_indexes_path)//"C"//trim(adjustl(rchar))// &
+        IMS_inp_file_indices = trim(IMS_indexes_path)//"C"//trim(adjustl(resl_str))// &
                                                     ".IMS.Indices.tile"//tile_str//".nc"                       
         if (myrank==printrank) print *, 'reading IMS index file', trim(IMS_inp_file_indices) 
 
         call observation_read_IMS_full(IMS_inp_file, IMS_inp_file_indices, &
-                                                    myrank, jdim, idim, num_subgrd_IMS_cels, sncov_IMS)
+                                                    myrank, jdim, idim, sncov_IMS)
 
         if (myrank==printrank) print*,'read in sncov, converting to snow depth' 
  
@@ -244,15 +242,15 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
         error=nf90_open(trim(vegt_inp_path), nf90_nowrite,ncid)
         call netcdf_err(error, 'opening file: '//trim(vegt_inp_path) )
 
-        error=nf90_inq_dimid(ncid, 'xaxis_1', id_dim)
-        call netcdf_err(error, 'reading xaxis_1' )
+        error=nf90_inq_dimid(ncid, 'nx', id_dim)
+        call netcdf_err(error, 'reading nx' )
         error=nf90_inquire_dimension(ncid,id_dim,len=idim)
-        call netcdf_err(error, 'reading xaxis_1' )
+        call netcdf_err(error, 'reading nx' )
 
-        error=nf90_inq_dimid(ncid, 'yaxis_1', id_dim)
-        call netcdf_err(error, 'reading yaxis_1' )
+        error=nf90_inq_dimid(ncid, 'ny', id_dim)
+        call netcdf_err(error, 'reading ny' )
         error=nf90_inquire_dimension(ncid,id_dim,len=jdim)
-        call netcdf_err(error, 'reading yaxis_1' )
+        call netcdf_err(error, 'reading ny' )
 
         if ((idim*jdim) /= lensfc) then
         print*,'fatal error reading veg type: dimensions wrong.'
@@ -261,10 +259,10 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
 
         allocate(dummy(idim,jdim))
 
-        error=nf90_inq_varid(ncid, "vtype", id_var)
-        call netcdf_err(error, 'reading vtype id' )
+        error=nf90_inq_varid(ncid, "vegetation_type", id_var)
+        call netcdf_err(error, 'reading vegetation type id' )
         error=nf90_get_var(ncid, id_var, dummy)
-        call netcdf_err(error, 'reading vtype' )
+        call netcdf_err(error, 'reading vegetation type' )
         vetfcs = reshape(dummy, (/lensfc/))    
 
         deallocate(dummy)
@@ -278,22 +276,22 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
 ! aggregate onto the model grid.
 
  subroutine observation_read_IMS_full(inp_file, inp_file_indices, &
-                    myrank, n_lat, n_lon, num_sub, &
-                    sncov_IMS)
+                    myrank, n_lat, n_lon, sncov_IMS)
                     
         implicit none
     
         include 'mpif.h'                  
     
         character(len=*), intent(in)   :: inp_file, inp_file_indices 
-        integer, intent(in)            :: myrank, n_lat, n_lon, num_sub
+        integer, intent(in)            :: myrank, n_lat, n_lon 
         real, intent(out)       :: sncov_IMS(n_lat * n_lon)     
     
         integer, allocatable    :: sncov_IMS_2d_full(:,:)   
-        integer                 :: data_grid_IMS_ind(num_sub, n_lon, n_lat) 
+        integer, allocatable    :: data_grid_IMS_ind(:,:,:)
         real                    :: grid_dat(n_lon, n_lat)
         
-        integer                :: error, ncid, id_dim, id_var, dim_len, dim_len_lat, dim_len_lon
+        integer                :: error, ncid, id_dim, id_var , n_ind
+        integer                :: dim_len_lat, dim_len_lon
         logical                :: file_exists
 
         ! read IMS observations in
@@ -320,6 +318,7 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
         error=nf90_inquire_dimension(ncid,id_dim,len=dim_len_lon)
         call netcdf_err(error, 'error reading size of dimension lon' )
     
+
         allocate(sncov_IMS_2d_full(dim_len_lon, dim_len_lat))   
 
         error=nf90_inq_varid(ncid, 'Band1', id_var)
@@ -343,25 +342,40 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
         error=nf90_open(trim(inp_file_indices),nf90_nowrite, ncid)
         call netcdf_err(error, 'opening file: '//trim(inp_file_indices) )
     
+        error=nf90_inq_dimid(ncid, 'Indices', id_dim)
+        call netcdf_err(error, 'error reading dimension indices' )
+    
+        error=nf90_inquire_dimension(ncid,id_dim,len=n_ind)
+        call netcdf_err(error, 'error reading size of dimension indices' )
+
+        allocate(data_grid_IMS_ind(n_ind,n_lon, n_lat))
+
         error=nf90_inq_varid(ncid, 'IMS_Indices', id_var)
         call netcdf_err(error, 'error reading sncov indices id' )
+
         error=nf90_get_var(ncid, id_var, data_grid_IMS_ind, start = (/ 1, 1, 1 /), &
-                                count = (/ num_sub, n_lon, n_lat/))
+                                count = (/ n_ind, n_lon, n_lat/))
         call netcdf_err(error, 'error reading sncov indices' )
     
         error = nf90_close(ncid)
    
-        ! conversion of IMS codes  
+        ! IMS codes: 0 - outside range,
+        !          : 1 - sea
+        !          : 2 - land, no snow 
+        !          : 3 - sea ice 
+        !          : 4 - snow covered land
         where(sncov_IMS_2d_full /= 4) sncov_IMS_2d_full = 0
         where(sncov_IMS_2d_full == 4) sncov_IMS_2d_full = 1
         
         call resample_to_model_tiles_intrp(sncov_IMS_2d_full, data_grid_IMS_ind, &
-                                           dim_len_lat, dim_len_lon, n_lat, n_lon, num_sub, &  !myrank, &
+                                           dim_len_lat, dim_len_lon, n_lat, n_lon, n_ind, &
                                            grid_dat)
     
         sncov_IMS = reshape(grid_dat, (/n_lat * n_lon/))
     
         deallocate(sncov_IMS_2d_full)
+        deallocate(data_grid_IMS_ind)
+
         return
         
  end subroutine observation_read_IMS_full
@@ -371,7 +385,6 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
 ! uses empirical inversion of snow depletion curve in the model 
 
  subroutine calcswefromsnowcover(sncov_IMS, vetfcs_in, lensfc, swe_IMS_at_grid)
-
         
         implicit none
         !
@@ -400,11 +413,12 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
                 0.000, 0.000, 0.000, 0.000, 0.000, 0.000/)
     
         salp = -4.0
-        vetfcs = int(vetfcs_in)
-        where(vetfcs==0) vetfcs = 7 
+        vetfcs = nint(vetfcs_in)
+        ! this is done in the noaa code, but we don't want to create a value outside land
+        !where(vetfcs==0) vetfcs = 7 
         
         do indx = 1, lensfc  
-            if (.not. IEEE_is_nan(sncov_IMS(indx))) then
+            if (.not. IEEE_is_nan(sncov_IMS(indx)) .and. (vetfcs(indx)>0)) then
                 snup = snupx(vetfcs(indx))
                 if (snup == 0.) then
                     print*, " 0.0 snup value, check vegclasses", vetfcs(indx)
@@ -427,6 +441,8 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
  end subroutine calcswefromsnowcover
 
 !====================================
+! project IMS input onto model grid
+! output (grid_dat), is the average of the input (data_grid_IMS) located within each grid cell.
 
  subroutine resample_to_model_tiles_intrp(data_grid_IMS, data_grid_IMS_ind, &
                                             nlat_IMS, nlon_IMS, n_lat, n_lon, num_sub, & 
@@ -449,7 +465,7 @@ subroutine calculate_IMS_fsca(num_tiles, myrank, idim, jdim, lensfc, &
 
         do ix=1, n_lon
             
-            num_loc_counter = data_grid_IMS_ind(1, ix, jy)
+            num_loc_counter = data_grid_IMS_ind(1, ix, jy) ! number IMS locations in this grid cell
             if (num_loc_counter < 1) then 
                 cycle
             end if

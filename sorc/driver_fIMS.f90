@@ -17,16 +17,13 @@
  integer :: lensfc, ierr
  integer :: nprocs, myrank, io
 
- integer             :: num_subgrd_IMS_cels, num_assim_steps
  character(len=10)   :: date_str ! yyyymmddhh
  character(len=500)  :: IMS_snowcover_path, IMS_indexes_path
  logical             :: file_exists
 
- namelist/fIMS_nml/  idim, jdim, date_str, num_subgrd_IMS_cels, & 
-                     IMS_snowcover_path, IMS_indexes_path
+ namelist/fIMS_nml/  idim, jdim, date_str, IMS_snowcover_path, IMS_indexes_path
 
  data num_tiles/6/
- data num_subgrd_IMS_cels/30/
 
  call mpi_init(ierr)
  call mpi_comm_size(mpi_comm_world, nprocs, ierr)
@@ -57,8 +54,7 @@
  call mpi_barrier(mpi_comm_world, ierr)
 
  call calculate_IMS_fsca(num_tiles, myrank, idim, jdim, &
-                      lensfc, num_subgrd_IMS_cels, date_str,&
-                      IMS_snowcover_path, IMS_indexes_path)
+                      lensfc, date_str, IMS_snowcover_path, IMS_indexes_path)
 
  print*,"calcfIMS returned on rank", myrank
 
