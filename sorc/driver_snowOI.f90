@@ -34,7 +34,7 @@
  DATA ver_len_scale/800./
  DATA obs_tolerance/5./ 
  DATA obs_srch_rad/250.0/
- DATA bkgst_srch_rad/27.0/ 
+ DATA bkgst_srch_rad/1000.0/  ! set the default so as to ensure obs aren't discarded at course res. 
  DATA max_num_nearStn/50/ 
  DATA max_num_nearIMS/5/
  DATA ims_max_ele/1500./
