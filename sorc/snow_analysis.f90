@@ -230,7 +230,7 @@ CONTAINS
              ! here: all valid stn obs, within lat/lon box (can be outside of tile though) 
              call Observation_Read_GHCND_Tile_excNaN(p_tN, ghcnd_inp_file, dim_name, &
                         lat_min, lat_max, lon_min, lon_max, & 
-                        num_stn, SNDOBS_stn,              &
+                        num_stn, SNDOBS_stn, OROGFCS_at_stn,              &
                         Lat_stn, Lon_stn, MYRANK) 
 
             if ((p_tRank==0) .and. print_deb) then
@@ -239,6 +239,8 @@ CONTAINS
             if ((p_tRank==0) .and. (p_tN==2) .and. print_deb) then
                     PRINT*, "Stn SND from rank: ", MYRANK
                     PRINT*, SNDOBS_stn
+                    PRINT*, "elevation at station locations from rank: ", MYRANK
+                    PRINT*, OROGFCS_at_stn
                     PRINT*, "Lat at Stn from rank: ", MYRANK
                     PRINT*, Lat_stn
                     PRINT*, "Lon at Stn from rank: ", MYRANK
@@ -297,7 +299,7 @@ CONTAINS
         ! Get model states at obs points
         if (num_stn > 0) then ! skip if not reading in station data / no obs were available
             ALLOCATE(SNDFCS_at_stn(num_stn))
-            ALLOCATE(OROGFCS_at_stn(num_stn)) 
+            ! ALLOCATE(OROGFCS_at_stn(num_stn)) 
             ALLOCATE(index_back_atObs(num_stn)) 
             ALLOCATE(SNDANL_at_stn(num_stn))
             ALLOCATE(array_index_back_atObs(2,num_stn)) 
@@ -307,9 +309,9 @@ CONTAINS
             gross_thold =  obs_tolerance * sqrt(stdev_back_depth**2 + stdev_obsv_stn**2)
             ! QC: remove non-land obs, and do gross-error check
             Call Observation_Operator_Parallel(Myrank, NUM_TILES, p_tN, p_tRank, Np_til, & 
-                                RLA, RLO, OROG, Lat_stn, Lon_stn, SNDOBS_stn,   &
+                                RLA, RLO, Lat_stn, Lon_stn, SNDOBS_stn,   & !OROG, 
                                 LENSFC, num_stn, bkgst_srch_rad, SNDFCS, LANDMASK, gross_thold,  &
-                                SNDFCS_at_stn, OROGFCS_at_stn, index_back_atObs )  
+                                SNDFCS_at_stn, index_back_atObs )  !OROGFCS_at_stn, 
             ! from here, invalid obs have no sndfcs_at_stn = NaN, and index_back_atObs = -1 
             ! Could speed up below by removing invalid obs
             ! At least, should add explicit assim_flag.
@@ -319,8 +321,8 @@ CONTAINS
             if ((p_tN==4) .and. (p_tRank==0) .and. print_deb) then
                     PRINT*, "station Lat range from rank: ", MYRANK, MINVAL(Lat_stn), " ", MAXVAL(Lat_stn)
                     PRINT*, "station Lon range from rank: ", MYRANK, MINVAL(Lon_stn), " ", MAXVAL(Lon_stn)
-                    PRINT*, "Model elevation at station locations from rank: ", MYRANK
-                    PRINT*, OROGFCS_at_stn
+                    ! PRINT*, "Model elevation at station locations from rank: ", MYRANK
+                    ! PRINT*, OROGFCS_at_stn
                     PRINT*, "Background Indices at obs points"
                     PRINT*, index_back_atObs
                     PRINT*, "Background snow depth at station locations from rank: ", MYRANK
