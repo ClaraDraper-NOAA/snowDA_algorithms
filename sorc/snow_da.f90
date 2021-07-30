@@ -566,9 +566,9 @@ MODULE M_DA
      End SUBROUTINE Observation_Read_IMS_Full
     
      SUBROUTINE Observation_Operator_Parallel(Myrank, MAX_TASKS, p_tN, p_tRank, Np_til, & 
-                            RLA, RLO, OROG, Lat_Obs, Lon_Obs, stn_obs,              &
+                            RLA, RLO, Lat_Obs, Lon_Obs, stn_obs,              &  !OROG, 
                             LENSFC, num_Obs, max_distance, SNOFCS_back, LANDMASK,  &
-                            gross_thold,SNOFCS_atObs, OROGFCS_atObs, index_back_atObs )
+                            gross_thold,SNOFCS_atObs, index_back_atObs ) !OROGFCS_atObs, 
 ! Draper, edited to make generic
 
         IMPLICIT NONE
@@ -576,13 +576,13 @@ MODULE M_DA
         !USE intrinsic::ieee_arithmetic
         include "mpif.h"
     
-        Real, Intent(In)        :: RLA(LENSFC), RLO(LENSFC), OROG(LENSFC)
+        Real, Intent(In)        :: RLA(LENSFC), RLO(LENSFC) !, OROG(LENSFC)
         integer, intent(in)     ::  LANDMASK(LENSFC)
         Real, Intent(In)        :: Lat_Obs(num_Obs), Lon_Obs(num_Obs), stn_obs(num_obs)  ! don't want to alter these
         INTEGER             :: Myrank, MAX_TASKS, p_tN, p_tRank, Np_til, LENSFC, num_Obs 
         Real                :: max_distance   ! extent from center of grid cell to search for obs
         Real, Intent(In)        :: SNOFCS_back(LENSFC)
-        Real, Intent(Out)       :: SNOFCS_atObs(num_Obs), OROGFCS_atObs(num_Obs)
+        Real, Intent(Out)       :: SNOFCS_atObs(num_Obs)  !, OROGFCS_atObs(num_Obs)
         Integer, Intent(Out)    :: index_back_atObs(num_Obs)   ! model index of grid cell nearst the obs.
         
         Real    :: Lon_Obs_2(num_Obs)          
@@ -613,7 +613,7 @@ MODULE M_DA
     
         !Fill background values to nan (to differentiate those htat don't have value)
         SNOFCS_atObs = IEEE_VALUE(SNOFCS_atObs, IEEE_QUIET_NAN) 
-        OROGFCS_atObs = IEEE_VALUE(OROGFCS_atObs, IEEE_QUIET_NAN)       
+        ! OROGFCS_atObs = IEEE_VALUE(OROGFCS_atObs, IEEE_QUIET_NAN)       
         index_back_atObs = -1   ! when corresponding value doesn't exit 
     
         ! RLO from 0 to 360 (no -ve lon)
@@ -645,7 +645,7 @@ MODULE M_DA
                 if ( (LANDMASK(min_indx) == 1)   .and. &   ! if nearest cell is no land, fcs value remains NaN
                     ( abs( SNOFCS_back(min_indx) - stn_obs(indx)   ) < gross_thold) ) then 
                     SNOFCS_atObs(indx) = SNOFCS_back(min_indx) 
-                    OROGFCS_atObs(indx) = OROG(min_indx)
+                    ! OROGFCS_atObs(indx) = OROG(min_indx)
                     index_back_atObs(indx) = min_indx
                 endif
             endif
@@ -680,8 +680,8 @@ MODULE M_DA
         if (MYRANK > (MAX_TASKS - 1) ) then
             call MPI_SEND(SNOFCS_atObs(mp_start:mp_end), N_sA, mpiReal_size, p_tN,   &
                           MYRANK, MPI_COMM_WORLD, IERR) 
-            call MPI_SEND(OROGFCS_atObs(mp_start:mp_end), N_sA, mpiReal_size, p_tN,   &
-                          MYRANK*100, MPI_COMM_WORLD, IERR)
+            ! call MPI_SEND(OROGFCS_atObs(mp_start:mp_end), N_sA, mpiReal_size, p_tN,   &
+            !               MYRANK*100, MPI_COMM_WORLD, IERR)
             call MPI_SEND(index_back_atObs(mp_start:mp_end), N_sA, mpiInt_size, p_tN,   &
                           MYRANK*1000, MPI_COMM_WORLD, IERR)
         else !if (MYRANK == p_tN ) then  
@@ -690,8 +690,8 @@ MODULE M_DA
                 send_proc = MYRANK +  pindex * MAX_TASKS
                 call MPI_RECV(SNOFCS_atObs(dest_Aoffset:dest_Aoffset+N_sA-1), N_sA, mpiReal_size, send_proc,  &
                           send_proc, MPI_COMM_WORLD, MPI_STATUS_IGNORE, IERR)
-                call MPI_RECV(OROGFCS_atObs(dest_Aoffset:dest_Aoffset+N_sA-1), N_sA, mpiReal_size, send_proc,   &
-                          send_proc*100, MPI_COMM_WORLD, MPI_STATUS_IGNORE, IERR)
+                ! call MPI_RECV(OROGFCS_atObs(dest_Aoffset:dest_Aoffset+N_sA-1), N_sA, mpiReal_size, send_proc,   &
+                !           send_proc*100, MPI_COMM_WORLD, MPI_STATUS_IGNORE, IERR)
                 call MPI_RECV(index_back_atObs(dest_Aoffset:dest_Aoffset+N_sA-1), N_sA, mpiInt_size, send_proc, &
                           send_proc*1000, MPI_COMM_WORLD, MPI_STATUS_IGNORE, IERR)
             enddo
@@ -702,12 +702,12 @@ MODULE M_DA
             Do pindex =  1, (Np_til - 1)   ! receiving proc index within tile group
                 rec_proc = MYRANK +  pindex * MAX_TASKS
                 call MPI_SEND(SNOFCS_atObs, num_Obs, mpiReal_size, rec_proc, MYRANK, MPI_COMM_WORLD, IERR) 
-                call MPI_SEND(OROGFCS_atObs, num_Obs, mpiReal_size, rec_proc, MYRANK*100, MPI_COMM_WORLD, IERR)
+                ! call MPI_SEND(OROGFCS_atObs, num_Obs, mpiReal_size, rec_proc, MYRANK*100, MPI_COMM_WORLD, IERR)
                 call MPI_SEND(index_back_atObs, num_Obs, mpiInt_size, rec_proc, MYRANK*1000, MPI_COMM_WORLD, IERR)
             enddo
         else 
             call MPI_RECV(SNOFCS_atObs, num_Obs, mpiReal_size, p_tN, p_tN, MPI_COMM_WORLD, MPI_STATUS_IGNORE, IERR)
-            call MPI_RECV(OROGFCS_atObs, num_Obs, mpiReal_size, p_tN, p_tN*100, MPI_COMM_WORLD, MPI_STATUS_IGNORE, IERR)
+            ! call MPI_RECV(OROGFCS_atObs, num_Obs, mpiReal_size, p_tN, p_tN*100, MPI_COMM_WORLD, MPI_STATUS_IGNORE, IERR)
             call MPI_RECV(index_back_atObs, num_Obs, mpiInt_size, p_tN, p_tN*1000, MPI_COMM_WORLD, MPI_STATUS_IGNORE, IERR)
         endif
         
@@ -718,7 +718,7 @@ MODULE M_DA
     SUBROUTINE Observation_Read_GHCND_Tile_excNaN(p_tN, ghcnd_inp_file, dim_name,       &
                     lat_min, lat_max, lon_min, lon_max, &
                     NDIM,                       &
-                    SND_GHCND,         &
+                    SND_GHCND, Ele_GHCND,         &
                     Lat_GHCND,      &
                     Lon_GHCND,          &
                     MYRANK)
@@ -734,10 +734,11 @@ MODULE M_DA
         REAL, Intent(In)       :: lat_min, lat_max, lon_min, lon_max 
         INTEGER, Intent(Out)   :: NDIM
         REAL, ALLOCATABLE, Intent(Out)    :: SND_GHCND(:)
-        REAL, ALLOCATABLE, Intent(Out)    :: Lat_GHCND(:), Lon_GHCND(:) !, Ele_GHCND(:)
+        REAL, ALLOCATABLE, Intent(Out)    :: Lat_GHCND(:), Lon_GHCND(:), Ele_GHCND(:)
     
         INTEGER                :: MYRANK, ERROR, NCID, ID_DIM, ID_VAR, NDIM_In
-        REAL, ALLOCATABLE      :: SND_GHCND_In(:), Lat_GHCND_In(:), Lon_GHCND_In(:) !, Ele_GHCND(:)
+        REAL, ALLOCATABLE      :: Lat_GHCND_In(:), Lon_GHCND_In(:), &
+                                  SND_GHCND_In(:), Ele_GHCND_In(:)
         INTEGER, ALLOCATABLE   :: index_Array(:)
         INTEGER                :: jndx, jcounter
         LOGICAL                :: file_exists
@@ -762,6 +763,7 @@ MODULE M_DA
         ALLOCATE(SND_GHCND_In(NDIM_In))
         ALLOCATE(Lat_GHCND_In(NDIM_In))
         ALLOCATE(Lon_GHCND_In(NDIM_In))
+        ALLOCATE(Ele_GHCND_In(NDIM_In))
     
         ERROR=NF90_INQ_VARID(NCID, 'SNWD', ID_VAR)
         CALL NETCDF_ERR(ERROR, 'ERROR READING SNWD ID' )
@@ -778,10 +780,10 @@ MODULE M_DA
         ERROR=NF90_GET_VAR(NCID, ID_VAR, Lon_GHCND_In)
         CALL NETCDF_ERR(ERROR, 'ERROR READING Lon RECORD' )
         ! need to read corresponding elevation values 
-        ! ERROR=NF90_INQ_VARID(NCID, 'Elevation', ID_VAR)
-        ! CALL NETCDF_ERR(ERROR, 'ERROR READING Elevation ID' )
-        ! ERROR=NF90_GET_VAR(NCID, ID_VAR, Ele_GHCND_In)
-        ! CALL NETCDF_ERR(ERROR, 'ERROR READING Elevation RECORD' )
+        ERROR=NF90_INQ_VARID(NCID, 'elevation', ID_VAR)
+        CALL NETCDF_ERR(ERROR, 'ERROR READING Elevation ID' )
+        ERROR=NF90_GET_VAR(NCID, ID_VAR, Ele_GHCND_In)
+        CALL NETCDF_ERR(ERROR, 'ERROR READING Elevation RECORD' )
         ALLOCATE(index_Array(NDIM_In))
         NDIM = 0
         jcounter = 1
@@ -813,11 +815,13 @@ MODULE M_DA
         ALLOCATE(SND_GHCND(NDIM))
         ALLOCATE(Lat_GHCND(NDIM))
         ALLOCATE(Lon_GHCND(NDIM))
+        ALLOCATE(Ele_GHCND(NDIM))
         If(NDIM > 0) then
             Do jndx = 1, NDIM
                 SND_GHCND(jndx) = SND_GHCND_In(index_Array(jndx))
                 Lat_GHCND(jndx) = Lat_GHCND_In(index_Array(jndx))
                 Lon_GHCND(jndx) = Lon_GHCND_In(index_Array(jndx))
+                Ele_GHCND(jndx) = Ele_GHCND_In(index_Array(jndx))
             End do
         Endif
         DEALLOCATE(index_Array)
