@@ -63,7 +63,7 @@ CONTAINS
         CHARACTER(len=250)   :: dim_name, ghcnd_inp_file, ims_inp_file, ims_inp_file_indices
         CHARACTER(len=5)     :: y_str, m_str, d_Str, h_str, fvs_tile
         REAL, ALLOCATABLE    :: SNDOBS_stn(:), SNDFCS_at_stn(:), SNDANL_at_stn(:)
-        REAL, ALLOCATABLE    :: Lat_stn(:), Lon_stn(:), OROGFCS_at_stn(:)  
+        REAL, ALLOCATABLE    :: Lat_stn(:), Lon_stn(:), orog_stn(:)  
         REAL                 :: lat_min, lat_max, lon_min, lon_max      
         Real                 :: SNCOV_IMS(LENSFC)  ! ims resampled at each grid
         Real                 :: SND_IMS_at_Grid(LENSFC), SWE_IMS_at_Grid(LENSFC)
@@ -76,7 +76,7 @@ CONTAINS
 
         Real(dp), Allocatable    :: B_cov_mat(:,:), b_cov_vect(:)
         Real(dp), Allocatable    :: O_cov_mat(:,:), W_wght_vect(:)
-        Real, Allocatable        :: back_at_Obs(:), obs_Array(:), Lat_Obs(:), Lon_Obs(:), orogfcs_Obs(:)
+        Real, Allocatable        :: back_at_Obs(:), obs_Array(:), Lat_Obs(:), Lon_Obs(:), orog_Obs(:)
         Real, Allocatable        :: obs_Innov(:), OmB_innov_at_stn(:)
 
         CHARACTER(len=250)       :: forc_inp_file, da_out_file  !anl_inp_path,
@@ -230,7 +230,7 @@ CONTAINS
              ! here: all valid stn obs, within lat/lon box (can be outside of tile though) 
              call Observation_Read_GHCND_Tile_excNaN(p_tN, ghcnd_inp_file, dim_name, &
                         lat_min, lat_max, lon_min, lon_max, & 
-                        num_stn, SNDOBS_stn, OROGFCS_at_stn,              &
+                        num_stn, SNDOBS_stn, orog_stn,              &
                         Lat_stn, Lon_stn, MYRANK) 
 
             if ((p_tRank==0) .and. print_deb) then
@@ -240,7 +240,7 @@ CONTAINS
                     PRINT*, "Stn SND from rank: ", MYRANK
                     PRINT*, SNDOBS_stn
                     PRINT*, "elevation at station locations from rank: ", MYRANK
-                    PRINT*, OROGFCS_at_stn
+                    PRINT*, OROG_stn
                     PRINT*, "Lat at Stn from rank: ", MYRANK
                     PRINT*, Lat_stn
                     PRINT*, "Lon at Stn from rank: ", MYRANK
@@ -299,7 +299,6 @@ CONTAINS
         ! Get model states at obs points
         if (num_stn > 0) then ! skip if not reading in station data / no obs were available
             ALLOCATE(SNDFCS_at_stn(num_stn))
-            ! ALLOCATE(OROGFCS_at_stn(num_stn)) 
             ALLOCATE(index_back_atObs(num_stn)) 
             ALLOCATE(SNDANL_at_stn(num_stn))
             ALLOCATE(array_index_back_atObs(2,num_stn)) 
@@ -309,9 +308,9 @@ CONTAINS
             gross_thold =  obs_tolerance * sqrt(stdev_back_depth**2 + stdev_obsv_stn**2)
             ! QC: remove non-land obs, and do gross-error check
             Call Observation_Operator_Parallel(Myrank, NUM_TILES, p_tN, p_tRank, Np_til, & 
-                                RLA, RLO, Lat_stn, Lon_stn, SNDOBS_stn,   & !OROG, 
+                                RLA, RLO, Lat_stn, Lon_stn, SNDOBS_stn,   &
                                 LENSFC, num_stn, bkgst_srch_rad, SNDFCS, LANDMASK, gross_thold,  &
-                                SNDFCS_at_stn, index_back_atObs )  !OROGFCS_at_stn, 
+                                SNDFCS_at_stn, index_back_atObs )
             ! from here, invalid obs have no sndfcs_at_stn = NaN, and index_back_atObs = -1 
             ! Could speed up below by removing invalid obs
             ! At least, should add explicit assim_flag.
@@ -321,8 +320,6 @@ CONTAINS
             if ((p_tN==4) .and. (p_tRank==0) .and. print_deb) then
                     PRINT*, "station Lat range from rank: ", MYRANK, MINVAL(Lat_stn), " ", MAXVAL(Lat_stn)
                     PRINT*, "station Lon range from rank: ", MYRANK, MINVAL(Lon_stn), " ", MAXVAL(Lon_stn)
-                    ! PRINT*, "Model elevation at station locations from rank: ", MYRANK
-                    ! PRINT*, OROGFCS_at_stn
                     PRINT*, "Background Indices at obs points"
                     PRINT*, index_back_atObs
                     PRINT*, "Background snow depth at station locations from rank: ", MYRANK
@@ -394,14 +391,14 @@ CONTAINS
                         Allocate(obs_Array(num_loc))
                         Allocate(Lat_Obs(num_loc))
                         Allocate(Lon_Obs(num_loc))
-                        Allocate(orogfcs_Obs(num_loc))                        
+                        Allocate(orog_Obs(num_loc))                        
                         if(num_loc_1 > 0) then
                                 Do zndx = 1, num_loc_1     
                                         back_at_Obs(zndx) = SNDFCS_at_stn(index_back_at_nearStn(zndx))
                                         obs_Array(zndx) = SNDOBS_stn(index_back_at_nearStn(zndx))
                                         Lat_Obs(zndx) = Lat_stn(index_back_at_nearStn(zndx))
                                         Lon_Obs(zndx) = Lon_stn(index_back_at_nearStn(zndx))
-                                        orogfcs_Obs(zndx) = OROGFCS_at_stn(index_back_at_nearStn(zndx)) 
+                                        orog_Obs(zndx) = OROG_stn(index_back_at_nearStn(zndx)) 
                                 End Do
                         End if
 
@@ -410,7 +407,7 @@ CONTAINS
                                 obs_Array(num_loc) = SND_IMS_at_Grid(jndx)
                                 Lat_Obs(num_loc) = RLA(jndx)   
                                 Lon_Obs(num_loc) = RLO(jndx) 
-                                orogfcs_Obs(num_loc) = OROG(jndx)
+                                orog_Obs(num_loc) = OROG(jndx)
                         endif
                         ! compute covariances
                         Allocate(B_cov_mat(num_loc, num_loc))
@@ -419,7 +416,7 @@ CONTAINS
                         Allocate(W_wght_vect(num_loc))   
 
                         call compute_covariances(RLA(jndx), RLO(jndx), OROG(jndx), SNDFCS(jndx),    &
-                                Lat_Obs, Lon_Obs, orogfcs_Obs, num_loc,   &
+                                Lat_Obs, Lon_Obs, orog_Obs, num_loc,   &
                                 stdev_back_depth, stdev_obsv_stn, stdev_obsv_ims,      &
                                 L_horz, h_ver,                                   &   !L_horz in Km, h_ver in m
                                 assim_sncov_thisGridCell,                          &
@@ -443,7 +440,7 @@ CONTAINS
                         endif           
                         !free mem
                         DEALLOCATE(back_at_Obs, obs_Array)
-                        DEALLOCATE(Lat_Obs, Lon_Obs, orogfcs_Obs, obs_Innov)
+                        DEALLOCATE(Lat_Obs, Lon_Obs, orog_Obs, obs_Innov)
                         DEALLOCATE(B_cov_mat, b_cov_vect, O_cov_mat, W_wght_vect)
                 else ! no obs were available,  keep background
                         SNDANL(jndx) = SNDFCS(jndx) 
@@ -528,9 +525,9 @@ CONTAINS
         gross_thold = 999999999. ! set to large, so don't filter out any analyses
         if (num_stn > 0 ) then
                 Call Observation_Operator_Parallel(Myrank, NUM_TILES, p_tN, p_tRank, Np_til, &
-                            RLA, RLO, OROG, Lat_stn, Lon_stn, SNDOBS_stn,   &
+                            RLA, RLO, Lat_stn, Lon_stn, SNDOBS_stn,   &
                             LENSFC, num_stn, bkgst_srch_rad, SNDANL, LANDMASK, gross_thold,  & 
-                            SNDANL_at_stn, OROGFCS_at_stn, index_back_atObs )
+                            SNDANL_at_stn, index_back_atObs )
         endif
 
         ! write outputs 
@@ -543,7 +540,7 @@ CONTAINS
                               SWEFCS, SWEANL, SNDFCS, SNDANL, LANDMASK,&  
                               SNCOV_IMS, SND_IMS_at_Grid, & 
                               num_stn, Lat_stn, Lon_stn, array_index_back_atObs, & 
-                              SNDOBS_stn, SNDFCS_at_stn, SNDANL_at_stn,OROGFCS_at_stn) 
+                              SNDOBS_stn, SNDFCS_at_stn, SNDANL_at_stn,OROG_stn) 
 
 998 CONTINUE
     ! clean up
@@ -553,7 +550,7 @@ CONTAINS
         if (allocated(OmB_innov_at_stn))   DEALLOCATE(OmB_innov_at_stn)
         if (allocated(Lat_stn))         DEALLOCATE(Lat_stn) 
         if (allocated(Lon_stn))         DEALLOCATE(Lon_stn) 
-        if (allocated(OROGFCS_at_stn))  DEALLOCATE(OROGFCS_at_stn) 
+        if (allocated(OROG_stn))        DEALLOCATE(OROG_stn) 
         if (allocated(index_back_atObs)) DEALLOCATE(index_back_atObs)
         if (allocated(array_index_back_atObs)) DEALLOCATE(array_index_back_atObs)
 999 CONTINUE
