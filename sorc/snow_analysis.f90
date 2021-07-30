@@ -541,7 +541,7 @@ CONTAINS
                               SWEFCS, SWEANL, SNDFCS, SNDANL, LANDMASK,&  
                               SNCOV_IMS, SND_IMS_at_Grid, & 
                               num_stn, Lat_stn, Lon_stn, array_index_back_atObs, & 
-                              SNDOBS_stn, SNDFCS_at_stn, SNDANL_at_stn) 
+                              SNDOBS_stn, SNDFCS_at_stn, SNDANL_at_stn,OROGFCS_at_stn) 
 
 998 CONTINUE
     ! clean up
@@ -625,7 +625,8 @@ CONTAINS
                                  lons_grid, lats_grid, & 
                                  snoforc, snoanl, snwdforc, snwdanal, landmask,  &
                                  SNCOV_IMS, SND_IMS_at_Grid, &
-                                 num_stn, Lat_atObs, Lon_atObs, index_stn,OBS_stn, FCS_at_stn, ANL_at_stn )  
+                                 num_stn, Lat_atObs, Lon_atObs, index_stn,OBS_stn, & 
+                                 FCS_at_stn, ANL_at_stn, ORO_at_stn)
 !**
         !------------------------------------------------------------------
         ! Write DA ouputs: 
@@ -642,7 +643,7 @@ CONTAINS
         real, intent(in)            ::  snwdforc(lensfc), snwdanal(lensfc)
         integer, intent(in)         :: landmask(lensfc)
         integer, intent(in)         :: index_stn(2,num_stn)
-        Real, intent(in)            :: OBS_stn(num_stn), FCS_at_stn(num_stn), ANL_at_stn(num_stn)
+        Real, intent(in)            :: OBS_stn(num_stn), FCS_at_stn(num_stn), ANL_at_stn(num_stn), ORO_at_stn(num_stn)
         Real, intent(in)            :: Lat_atObs(num_stn), Lon_atObs(num_stn)
         Real, intent(in)            :: SND_IMS_at_Grid(lensfc), SNCOV_IMS(lensfc)  !, anl_fSCA(lensfc)
 
@@ -654,7 +655,7 @@ CONTAINS
         integer                     :: id_x, id_y, id_time
         integer       :: id_swe_forc, id_swe, id_snwdf, id_snwd, id_imssno, id_imscov  
         integer       :: id_latstn, id_lonstn, id_obsstn, id_forcstn, id_analstn, id_landmask
-        integer       :: id_iindex, id_jindex, id_lon, id_lat
+        integer       :: id_iindex, id_jindex, id_lon, id_lat, id_orostn
         
         integer                     :: myrank
 
@@ -792,6 +793,13 @@ CONTAINS
         error = nf90_put_att(ncid, id_lonstn, "units", "deg")
         call netcdf_err(error, 'DEFINING longitude@MetaData UNITS' )
         
+        error = nf90_def_var(ncid, 'orography@MetaData', NF90_DOUBLE, dim_stn, id_orostn)
+        call netcdf_err(error, 'DEFINING orography@MetaData' )
+        error = nf90_put_att(ncid, id_orostn, "long_name", "Orography at Observation Points")
+        call netcdf_err(error, 'DEFINING orography@MetaData LONG NAME' )
+        error = nf90_put_att(ncid, id_orostn, "units", "m")
+        call netcdf_err(error, 'DEFINING orography@MetaData UNITS' )
+
         error = nf90_def_var(ncid, 'IDIM_index@MetaData', NF90_INT, dim_stn, id_iindex)
         call netcdf_err(error, 'DEFINING IDIM_index@MetaData' )
         error = nf90_put_att(ncid, id_iindex, "long_name", "IDIM index at Observation Points")
@@ -895,6 +903,9 @@ CONTAINS
 
         error = nf90_put_var( ncid, id_lonstn, Lon_atObs)
         call netcdf_err(error, 'WRITING Lon_atObsPts RECORD' )
+
+        error = nf90_put_var( ncid, id_orostn, oro_at_stn)
+        call netcdf_err(error, 'WRITING oro_atObsPts RECORD' )
 
         error = nf90_put_var( ncid, id_iindex, index_stn(1,:))
         call netcdf_err(error, 'WRITING idim index RECORD' )
