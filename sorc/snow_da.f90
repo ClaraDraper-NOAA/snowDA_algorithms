@@ -124,7 +124,7 @@ MODULE M_DA
             print*, "Backround corr at obs pts"
             print*, B_cov_mat
         endif   
-        !B_cov_mat(num_Obs, num_Obs) = 1.
+        B_cov_mat(num_Obs, num_Obs) = 1.
         B_cov_mat = B_cov_mat * Stdev_back * stdev_back   
         if (print_debug) then
             print*, "Backround cov at obs pts"
