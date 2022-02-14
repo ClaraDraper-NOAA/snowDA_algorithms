@@ -1,7 +1,17 @@
-Standalone snow OI code to assimilate GHCN snow depth obs and IMS snow cover.
+Standalone snow DA code with OI/EnKF/EnSRF to assimilate station snow depth obs (tested for GHCN) and IMS snow cover to UFS land surface models Noah and Noah-MP
 
-driver is adapted from ufs_utils/global_cycle/cycle.f90 
+driver is adapted from ufs_utils/global_cycle/cycle.f90 and earlier OI implementaiton for Noah https://github.com/ClaraDraper-NOAA/snowDA_OI
 
-Tseganeh Gichamo and Clara Draper, Mar. 2021.
+This repository includes
 
+1 - OI applied to NOAH snow depth on FV3 tiles
 
+2 - OI applied to NOAH-MP multi-layer snow depth on land-only FV3 grids vector
+
+3 - EnKF applied to NOAH-MP multi-layer snow depth on land-only vector
+
+4 - EnSRF applied to NOAH-MP on land only
+
+Works on (vectorized) land grid cellls of the UFS FV3 tiles
+
+Tseganeh Gichamo and Clara Draper, Mar. 2022.
